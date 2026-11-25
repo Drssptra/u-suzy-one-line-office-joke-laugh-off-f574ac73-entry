@@ -1,32 +1,54 @@
-// One-Line Office Joke Laugh-Off — make.fun entry.
+// One-Line Office Joke Laugh-Off — v2 resubmit.
 //
-// This program writes exactly one joke to stdout and to the entry
-// file the sealed scorer reads. The joke is a single line about
-// office life, kept here as one plain string so every run of the
-// program produces the identical entry, byte for byte.
+// The entry below is a fresh joke for this resubmission: the office
+// suggestion box turns on its own first suggestion. It is assembled
+// from three short fragments so the wording stays readable in the
+// source while the emitted line is one fixed, deterministic string,
+// identical on every run.
 
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { closeSync, mkdirSync, openSync, writeSync } from "node:fs";
+import { resolve } from "node:path";
 
-const JOKE =
-  "My boss swore my job was safe, then asked me to train the AI replacing me — so I taught it to call in sick.";
+const FRAGMENTS: readonly string[] = [
+  "Our boss installed a suggestion box, ",
+  "then shredded the first suggestion: ",
+  "remove the suggestion box.",
+];
 
-// The gate allows 1 to 200 characters and rejects whitespace-only
-// entries; refuse to write anything outside that range rather than
-// silently shipping a bad entry.
-const MAX_CHARS = 200;
-if (JOKE.length < 1 || JOKE.length > MAX_CHARS || JOKE.trim().length === 0) {
-  throw new Error(`entry is ${JOKE.length} characters, outside the 1-200 gate`);
-}
-if (JOKE.includes("\n")) {
-  throw new Error("entry must be a single line");
+function assemble(fragments: readonly string[]): string {
+  return fragments.reduce((acc, part) => acc + part, "");
 }
 
-const outputDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
-mkdirSync(outputDir, { recursive: true });
+function checkEntry(text: string): void {
+  const chars = Array.from(text);
+  const problems: string[] = [];
+  if (chars.length < 1 || chars.length > 200) {
+    problems.push(`length ${chars.length} is outside 1-200`);
+  }
+  if (text.trim().length === 0) {
+    problems.push("entry is blank");
+  }
+  if (/[\r\n]/.test(text)) {
+    problems.push("entry spans more than one line");
+  }
+  if (problems.length > 0) {
+    throw new Error(`invalid entry: ${problems.join("; ")}`);
+  }
+}
 
-// Write the file with no trailing newline: entry.txt must hold
-// exactly the entry text and nothing else.
-writeFileSync(join(outputDir, "entry.txt"), JOKE, "utf8");
-// Stdout may carry a newline; print the entry and nothing else.
-console.log(JOKE);
+const entry = assemble(FRAGMENTS);
+checkEntry(entry);
+
+const outDir = resolve(process.env.MAKEFUN_OUTPUT_DIR ?? "/output");
+mkdirSync(outDir, { recursive: true });
+
+const fd = openSync(resolve(outDir, "entry.txt"), "w");
+try {
+  // A raw descriptor write: entry.txt gets exactly the entry bytes,
+  // with no trailing newline added by any helper.
+  writeSync(fd, entry, null, "utf8");
+} finally {
+  closeSync(fd);
+}
+
+process.stdout.write(entry + "\n");
